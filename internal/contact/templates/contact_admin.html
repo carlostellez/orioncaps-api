@@ -1,0 +1,18 @@
+<html>
+<body>
+  <h1>Nuevo mensaje de contacto</h1>
+  <div style="background:#f5f5f5;padding:20px;border-radius:5px">
+    <p><strong>Nombre:</strong> {{ .Form.FullName }}</p>
+    <p><strong>Email:</strong> {{ .Form.Email }}</p>
+    <p><strong>Teléfono:</strong> {{ .Form.Phone }}</p>
+    {{ if .Form.Company }}<p><strong>Empresa:</strong> {{ .Form.Company }}</p>{{ end }}
+    {{ if .Form.ProductType }}<p><strong>Producto:</strong> {{ .Form.ProductType }}</p>{{ end }}
+    {{ if .Form.Quantity }}<p><strong>Cantidad:</strong> {{ .Form.Quantity }}</p>{{ end }}
+    <p><strong>Mensaje:</strong></p>
+    <div style="background:#fff;padding:15px;border-left:4px solid #007bff;white-space:pre-wrap">{{ .Form.Message }}</div>
+  </div>
+  <p><strong>Fecha:</strong> {{ .When }}</p>
+  <hr>
+  <p><em>Enviado desde el formulario de contacto de {{ .Brand }}.</em></p>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<html>
+<body>
+  <h1>¡Gracias por contactarnos!</h1>
+  <p>Hola {{ .Form.FullName }},</p>
+  <p>Hemos recibido tu mensaje y te responderemos pronto.</p>
+  <div style="background:#f5f5f5;padding:15px;border-radius:5px">
+    <h3>Resumen de tu mensaje</h3>
+    <div style="background:#fff;padding:10px;border-left:3px solid #28a745;white-space:pre-wrap">{{ .Preview }}{{ if .Truncated }}...{{ end }}</div>
+  </div>
+  <p>Saludos,<br>El equipo de {{ .Brand }}</p>
+</body>
+</html>
