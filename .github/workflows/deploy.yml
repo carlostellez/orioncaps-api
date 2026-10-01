@@ -1,0 +1,76 @@
+name: Deploy
+
+# push a master -> dev automaticamente.
+# prod -> manual (Actions > Deploy > Run workflow), protegido por el environment "prod".
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage a desplegar
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  id-token: write # OIDC hacia AWS (sin llaves estaticas)
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.stage || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./... -race -cover
+
+  deploy:
+    name: Deploy (${{ inputs.stage || 'dev' }})
+    needs: test
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.stage || 'dev' }}
+    env:
+      STAGE: ${{ inputs.stage || 'dev' }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Build Lambda
+        run: make build-lambda
+
+      - name: Instalar Serverless Framework
+        run: npm ci
+
+      - name: Credenciales AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Desplegar
+        run: npx serverless deploy --stage "$STAGE" --region "$AWS_REGION" --verbose
+
+      - name: Smoke test (/health)
+        run: |
+          url=$(aws cloudformation describe-stacks --stack-name "orioncaps-api-$STAGE" \
+            --query "Stacks[0].Outputs[?OutputKey=='ServiceEndpoint'].OutputValue" --output text)
+          echo "Endpoint: $url"
+          curl --fail --silent --show-error --retry 3 --retry-delay 3 "$url/health"

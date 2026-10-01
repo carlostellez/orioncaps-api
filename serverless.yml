@@ -1,0 +1,84 @@
+service: orioncaps-api
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: provided.al2023
+  architecture: arm64
+  region: ${opt:region, 'us-east-2'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 128
+  timeout: 15
+  logRetentionInDays: 14
+
+  apiGateway:
+    apiKeys:
+      - name: orioncaps-api-key-${self:provider.stage}
+        description: API Key del sitio web de Orion Caps (${self:provider.stage})
+    usagePlan:
+      quota:
+        limit: 5000
+        period: DAY
+      throttle:
+        burstLimit: 10
+        rateLimit: 5
+
+  # Los valores se leen de SSM Parameter Store al desplegar (ver document/DESPLIEGUE.md).
+  environment:
+    BRAND_NAME: Orion Caps
+    MAILGUN_API_KEY: ${ssm:/orioncaps-api/${self:provider.stage}/mailgun-api-key}
+    MAILGUN_DOMAIN: ${ssm:/orioncaps-api/${self:provider.stage}/mailgun-domain}
+    FROM_EMAIL: ${ssm:/orioncaps-api/${self:provider.stage}/from-email}
+    ADMIN_EMAIL: ${ssm:/orioncaps-api/${self:provider.stage}/admin-email}
+    ALLOWED_ORIGINS: ${ssm:/orioncaps-api/${self:provider.stage}/allowed-origins}
+
+package:
+  artifact: dist/lambda.zip
+
+functions:
+  api:
+    handler: bootstrap
+    events:
+      - http:
+          path: /api/v1/contact
+          method: POST
+          private: true # exige x-api-key
+      # El preflight CORS del navegador no envia la API Key: lo atiende la app (sin key).
+      - http:
+          path: /api/v1/contact
+          method: OPTIONS
+      - http:
+          path: /health
+          method: GET
+
+resources:
+  Resources:
+    AlertsTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: orioncaps-api-${self:provider.stage}-alerts
+
+    ApiErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: orioncaps-api-${self:provider.stage}-errors
+        AlarmDescription: Errores en el Lambda de orioncaps-api
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: ${self:service}-${self:provider.stage}-api
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 1
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        AlarmActions:
+          - Ref: AlertsTopic
+
+  Outputs:
+    AlertsTopicArn:
+      Value:
+        Ref: AlertsTopic
